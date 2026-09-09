@@ -14,11 +14,12 @@ Adapt.adapt_structure(to,j::Jet) = j
 # The floor (dim-1 low face) is the jet inflow; the top and sides are open far-field boundaries handled
 # by BiotSavartBCs.jl (velocity there is set from the interior vorticity via the Biot-Savart integral,
 # rather than a slip wall or convective exit), so only the floor (`-1`) is excluded via `nonbiotfaces`.
-function ball(;L=32,Re=2500,U=1,off=0.4,H=10,W=6,T=Float32,mem=Array)
-    xc = T(W*L/2)
-    center = SA{T}[2L,xc+off*L]
-    body = AutoBody((x,t)->√sum(abs2,x-center)-L/2)
-    BiotSimulation((H*L,W*L),Jet(T(U),xc,T(1.25L)),L;U,ν=U*L/Re,body,T,mem,nonbiotfaces=(-1,))
+function ball(;D=2^7,Re=10^5,U=1,off=0.15,H=10,W=6,h=4,r=1.2,T=Float32,mem=Array)
+    R = T(D/2)
+    xc = T(W*R)
+    center = SA{T}[h*D,xc+off*R]
+    body = AutoBody((x,t)->√sum(abs2,x-center)-R)
+    BiotSimulation((H*D,W*D),Jet(T(U),xc,T(r*R)),D;U,ν=U*D/Re,body,T,mem,nonbiotfaces=(-1,))
 end
 
 using CUDA
@@ -32,7 +33,7 @@ jet = sim.flow.uBC
 # rasterised into a fading, speed-coloured canvas — a numerical dye/smoke visualisation, updated once per
 # flow step alongside the pressure field.
 particles = Particles(16_000,sim.flow.p;life=UInt(200),mem)
-canvas = PathlineCanvas(Ni[1],Ni[2];bgcolor=:white,fadetau=1.2,colormap=:inferno,colorrange=(0,1.2))
+canvas = PathlineCanvas(Ni[1],Ni[2];bgcolor=:white,fadetau=1.2,colormap=:inferno,colorrange=(0,.9))
 
 # ball outline: computed once since the body is static. Raw pressure inside the immersed body is not
 # physically meaningful, so it's masked out (NaN) wherever the sdf is negative.
@@ -70,7 +71,7 @@ end
 GLMakie.hidedecorations!(ax1); GLMakie.hidedecorations!(ax2)
 
 # run & visualise
-t₀ = sim_time(sim); duration = 80; tstep = 0.2
+t₀ = sim_time(sim); duration = 160; tstep = 0.2
 Cy,t_F = Float64[],Float64[] # lateral force coefficient
 
 GLMakie.record(fig,"ball_on_jet.mp4";framerate=30) do io
