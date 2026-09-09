@@ -1,4 +1,4 @@
-using WaterLily,Pathlines,StaticArrays,GLMakie,Plots,Adapt
+using WaterLily,BiotSavartBCs,Pathlines,StaticArrays,GLMakie,Plots,Adapt
 
 # Jet inflow: uniform vertical velocity U inside radius `r` of the domain centreline (dim 2), zero outside
 # and zero tangentially — a blower nozzle set into an otherwise closed floor. Passed as the `uBC(i,x,t)`
@@ -11,13 +11,14 @@ struct Jet{T} <: Function; U::T; xc::T; r::T; end
 Adapt.adapt_structure(to,j::Jet) = j
 
 # A ball of diameter L floating in a vertical jet of diameter L, offset `off`·L from the jet centreline.
-# The floor (dim-1 low face) is the jet, the sides are slip walls, and the top (dim-1 high face) is a free
-# outlet (`exitBC`) — dim 1 must carry the flow for WaterLily's exit convention to apply.
-function ball(;L=32,Re=250,U=1,off=0.4,H=10,W=6,T=Float32,mem=Array)
+# The floor (dim-1 low face) is the jet inflow; the top and sides are open far-field boundaries handled
+# by BiotSavartBCs.jl (velocity there is set from the interior vorticity via the Biot-Savart integral,
+# rather than a slip wall or convective exit), so only the floor (`-1`) is excluded via `nonbiotfaces`.
+function ball(;L=32,Re=2500,U=1,off=0.4,H=10,W=6,T=Float32,mem=Array)
     xc = T(W*L/2)
     center = SA{T}[2L,xc+off*L]
     body = AutoBody((x,t)->√sum(abs2,x-center)-L/2)
-    Simulation((H*L,W*L),Jet(T(U),xc,T(1.25L)),L;U,ν=U*L/Re,body,exitBC=true,T,mem)
+    BiotSimulation((H*L,W*L),Jet(T(U),xc,T(1.25L)),L;U,ν=U*L/Re,body,T,mem,nonbiotfaces=(-1,))
 end
 
 using CUDA
@@ -31,9 +32,7 @@ jet = sim.flow.uBC
 # rasterised into a fading, speed-coloured canvas — a numerical dye/smoke visualisation, updated once per
 # flow step alongside the pressure field.
 particles = Particles(16_000,sim.flow.p;life=UInt(200),mem)
-# colorrange starts below 0 so even near-zero speeds sit above inferno's near-black floor,
-# keeping slow-moving trails visible against the black canvas instead of blending into it
-canvas = PathlineCanvas(Ni[1],Ni[2];bgcolor=:black,fadetau=1.2,colormap=:inferno,colorrange=(-0.3,1.2))
+canvas = PathlineCanvas(Ni[1],Ni[2];bgcolor=:white,fadetau=1.2,colormap=:inferno,colorrange=(0,1.2))
 
 # ball outline: computed once since the body is static. Raw pressure inside the immersed body is not
 # physically meaningful, so it's masked out (NaN) wherever the sdf is negative.
@@ -52,12 +51,16 @@ canvas_obs = Observable(permutedims(canvas.canvas))
 fig = GLMakie.Figure(size=(1000,650))
 ax1 = GLMakie.Axis(fig[1,1],aspect=GLMakie.DataAspect(),title="pressure")
 ax2 = GLMakie.Axis(fig[1,2],aspect=GLMakie.DataAspect(),title="pathlines")
-GLMakie.contourf!(ax1,p_obs;colormap=:seismic,levels=range(-0.3f0,0.3f0,length=21),extendlow=:auto,extendhigh=:auto)
+# alpha<1 softens the colormap so the red/blue extremes aren't fully saturated, toning down the contrast
+GLMakie.contourf!(ax1,p_obs;colormap=(:seismic,0.6),levels=range(-0.3f0,0.3f0,length=21),extendlow=:auto,extendhigh=:auto)
 GLMakie.contour!(ax1,sdf;levels=[0],color=:black,linewidth=2)
-GLMakie.image!(ax2,canvas_obs)
+# canvas_obs is rendered at its own fixed pixel resolution, independent of the sim's grid size — so it
+# must be stretched explicitly onto the grid's coordinate range (0..Ni[2] × 0..Ni[1], matching sdf below)
+# or it plots at pixel-count scale instead, making the body/inlet markers look wildly mis-sized against it
+GLMakie.image!(ax2,0..Ni[2],0..Ni[1],canvas_obs)
 # fill the body solid so it reads as an object against the pathlines, not just a thin outline
-GLMakie.contourf!(ax2,sdf;levels=[-1f4,0],colormap=[:gray80])
-GLMakie.contour!(ax2,sdf;levels=[0],color=:cyan,linewidth=2)
+GLMakie.contourf!(ax2,sdf;levels=[-1f4,0],colormap=[:gray50])
+GLMakie.contour!(ax2,sdf;levels=[0],color=:black,linewidth=2)
 
 # mark the inflow span on the floor of each panel
 for ax ∈ (ax1,ax2)

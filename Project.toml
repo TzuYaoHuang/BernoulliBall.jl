@@ -1,5 +1,7 @@
 [deps]
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
+BiotSavartBCs = "ec5a6caf-bdf7-41d0-b8e1-5fafde84e19f"
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
 LilyPad = "e335cd22-3907-46ba-824b-62f80b6bacdb"
 Pathlines = "5152f5a6-f176-4b17-91fb-55faba501013"
@@ -8,6 +10,7 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 WaterLily = "ed894a53-35f9-47f1-b17f-85db9237eebd"
 
 [sources]
+BiotSavartBCs = {url = "https://github.com/WaterLily-jl/BiotSavartBCs.jl"}
 LilyPad = {url = "https://github.com/WaterLily-jl/LilyPad.jl"}
 Pathlines = {url = "https://github.com/WaterLily-jl/Pathlines.jl"}
 
