@@ -30,8 +30,10 @@ jet = sim.flow.uBC
 # 2nd-order departure-point scheme (`Pathlines.update!`, generic over any WaterLily.Simulation) and
 # rasterised into a fading, speed-coloured canvas — a numerical dye/smoke visualisation, updated once per
 # flow step alongside the pressure field.
-particles = Particles(12_000,sim.flow.p;life=UInt(200),mem)
-canvas = PathlineCanvas(Ni[1],Ni[2];bgcolor=:black,fadetau=0.8,colormap=:inferno,colorrange=(0,2))
+particles = Particles(16_000,sim.flow.p;life=UInt(200),mem)
+# colorrange starts below 0 so even near-zero speeds sit above inferno's near-black floor,
+# keeping slow-moving trails visible against the black canvas instead of blending into it
+canvas = PathlineCanvas(Ni[1],Ni[2];bgcolor=:black,fadetau=1.2,colormap=:inferno,colorrange=(-0.3,1.2))
 
 # ball outline: computed once since the body is static. Raw pressure inside the immersed body is not
 # physically meaningful, so it's masked out (NaN) wherever the sdf is negative.
@@ -53,7 +55,9 @@ ax2 = GLMakie.Axis(fig[1,2],aspect=GLMakie.DataAspect(),title="pathlines")
 GLMakie.contourf!(ax1,p_obs;colormap=:seismic,levels=range(-0.3f0,0.3f0,length=21),extendlow=:auto,extendhigh=:auto)
 GLMakie.contour!(ax1,sdf;levels=[0],color=:black,linewidth=2)
 GLMakie.image!(ax2,canvas_obs)
-GLMakie.contour!(ax2,sdf;levels=[0],color=:white,linewidth=2)
+# fill the body solid so it reads as an object against the pathlines, not just a thin outline
+GLMakie.contourf!(ax2,sdf;levels=[-1f4,0],colormap=[:gray80])
+GLMakie.contour!(ax2,sdf;levels=[0],color=:cyan,linewidth=2)
 
 # mark the inflow span on the floor of each panel
 for ax ∈ (ax1,ax2)
