@@ -1,10 +1,14 @@
-using WaterLily,Pathlines,StaticArrays,GLMakie,Plots
+using WaterLily,Pathlines,StaticArrays,GLMakie,Plots,Adapt
 
 # Jet inflow: uniform vertical velocity U inside radius `r` of the domain centreline (dim 2), zero outside
 # and zero tangentially — a blower nozzle set into an otherwise closed floor. Passed as the `uBC(i,x,t)`
 # function, it also initialises the whole jet column at t=0.
 struct Jet{T} <: Function; U::T; xc::T; r::T; end
 (bc::Jet)(i,x,t) = i==1 && abs(x[2]-bc.xc)<bc.r ? bc.U : zero(bc.U)
+# Jet's 3 fields share a single type parameter T, which breaks Adapt's generic closure adaptor
+# (it assumes one type parameter per captured field). Since the fields are plain scalars that
+# never need device conversion, adapting is just the identity.
+Adapt.adapt_structure(to,j::Jet) = j
 
 # A ball of diameter L floating in a vertical jet of diameter L, offset `off`·L from the jet centreline.
 # The floor (dim-1 low face) is the jet, the sides are slip walls, and the top (dim-1 high face) is a free
@@ -16,8 +20,9 @@ function ball(;L=32,Re=250,U=1,off=0.4,H=10,W=6,T=Float32,mem=Array)
     Simulation((H*L,W*L),Jet(T(U),xc,T(1.25L)),L;U,ν=U*L/Re,body,exitBC=true,T,mem)
 end
 
-# using CUDA
-sim = ball() #;mem=CuArray)
+using CUDA
+mem = CUDA.functional() ? CuArray : Array
+sim = ball(;mem)
 Ni = size(inside(sim.flow.p))
 jet = sim.flow.uBC
 
@@ -25,7 +30,7 @@ jet = sim.flow.uBC
 # 2nd-order departure-point scheme (`Pathlines.update!`, generic over any WaterLily.Simulation) and
 # rasterised into a fading, speed-coloured canvas — a numerical dye/smoke visualisation, updated once per
 # flow step alongside the pressure field.
-particles = Particles(12_000,sim.flow.p;life=UInt(200))
+particles = Particles(12_000,sim.flow.p;life=UInt(200),mem)
 canvas = PathlineCanvas(Ni[1],Ni[2];bgcolor=:black,fadetau=0.8,colormap=:inferno,colorrange=(0,2))
 
 # ball outline: computed once since the body is static. Raw pressure inside the immersed body is not
@@ -67,7 +72,7 @@ GLMakie.record(fig,"ball_on_jet.mp4";framerate=30) do io
             mom_step!(sim.flow,sim.pois)
             dt = Float32(sim.flow.Δt[end-1]) # Δt of the step just taken (Δt[end] is next step's prediction)
             Pathlines.update!(particles,sim)
-            fade!(canvas,dt); draw!(canvas,particles.position,particles.position⁰,dt)
+            fade!(canvas,dt); draw!(canvas,Array(particles.position),Array(particles.position⁰),dt)
             push!(Cy,-2WaterLily.pressure_force(sim)[2]/sim.L); push!(t_F,sim_time(sim))
         end
         isempty(Cy) || println("tU/L=",round(tᵢ,digits=3),"  Cy=",round(Cy[end],digits=3))
