@@ -1,0 +1,7 @@
+Manifest.toml
+.vscode/
+*.log
+*.gif
+*.mp4
+*.png
+.DS_store
