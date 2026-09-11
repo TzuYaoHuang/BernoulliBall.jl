@@ -14,10 +14,11 @@ Adapt.adapt_structure(to,j::Jet) = j
 # The floor (dim-1 low face) is the jet inflow; the top and sides are open far-field boundaries handled
 # by BiotSavartBCs.jl (velocity there is set from the interior vorticity via the Biot-Savart integral,
 # rather than a slip wall or convective exit), so only the floor (`-1`) is excluded via `nonbiotfaces`.
-function ball(;D=2^7,Re=10^5,U=1,off=0.15,H=10,W=6,h=4,r=1.2,T=Float32,mem=Array)
+function ball(;D=2^5,Re=10^5,U=1,off=0.3,H=4,W=6,h=2,r=1.5,T=Float32,mem=Array)
     R = T(D/2)
     xc = T(W*R)
     center = SA{T}[h*D,xc+off*R]
+    # body = WaterLily.NoBody() 
     body = AutoBody((x,t)->√sum(abs2,x-center)-R)
     BiotSimulation((H*D,W*D),Jet(T(U),xc,T(r*R)),D;U,ν=U*D/Re,body,T,mem,nonbiotfaces=(-1,))
 end
